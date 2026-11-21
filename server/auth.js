@@ -9,7 +9,16 @@ export function identityConfig(env=process.env){
    AUTH_AUDIENCE!==AUTH_AUDIENCE.trim()||/[\x00-\x1f\x7f]/.test(AUTH_AUDIENCE)||
    AUTH_ISSUER.length>2048||AUTH_JWKS_URL.length>2048)
   throw new Error("Authentication is not configured");
- const url=new URL(AUTH_JWKS_URL),issuer=new URL(AUTH_ISSUER);
+ // WHATWG URL parse failures expose the original .input property (including
+ // accidental credentials). Protected startup runs outside HTTP error handlers;
+ // never let the parser's exception reach stdout/stderr or structured logs.
+ let url,issuer;
+ try{
+  url=new URL(AUTH_JWKS_URL);
+  issuer=new URL(AUTH_ISSUER);
+ }catch{
+  throw new Error("Invalid authentication configuration");
+ }
  const protectedMode=env.PROFITPILOT_PROFILE==="protected";
  const localTest=env.NODE_ENV==="test"&&!protectedMode&&url.protocol==="http:"&&["127.0.0.1","[::1]","localhost"].includes(url.hostname);
  if((url.protocol!=="https:"&&!localTest)||url.username||url.password||url.hash||

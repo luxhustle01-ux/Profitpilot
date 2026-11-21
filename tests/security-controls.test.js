@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {inspect} from "node:util";
 import {identityConfig,validSubject,validTokenLifetime} from "../server/auth.js";
 import {allowedImportRows} from "../server/privacy.js";
 const env={AUTH_ISSUER:"https://issuer.invalid/",AUTH_AUDIENCE:"api",AUTH_JWKS_URL:"https://issuer.invalid/jwks",NODE_ENV:"production"};
@@ -10,6 +11,20 @@ test("identity configuration rejects insecure, credential-bearing and non-test J
  assert.throws(()=>identityConfig({...env,NODE_ENV:"test",AUTH_JWKS_URL:"http://external.invalid/jwks"}));
  assert.throws(()=>identityConfig({...env,NODE_ENV:"test",PROFITPILOT_PROFILE:"protected",AUTH_JWKS_URL:"http://127.0.0.1/jwks"}));
 });
+test("B28 malformed issuer and JWKS URLs redact original credential-bearing inputs",()=>{
+ const marker="b28-url-credential-marker";
+ for(const field of ["AUTH_JWKS_URL","AUTH_ISSUER"]){
+  assert.throws(()=>identityConfig({...env,PROFITPILOT_PROFILE:"protected",
+   [field]:"https://admin:"+marker+"@bad host/jwks"}),error=>{
+    assert.equal(error.message,"Invalid authentication configuration");
+    assert.equal(Object.hasOwn(error,"input"),false);
+    for(const output of [inspect(error),String(error.stack),JSON.stringify(error)])
+     assert.ok(!output.includes(marker),"Authentication config exception exposed original URL");
+    return true;
+  });
+ }
+});
+
 test("identity subject and lifetime bounds",()=>{
  assert.ok(validSubject("provider|123"));for(const s of [""," ","a\nb","a\u0000b","x".repeat(256)])assert.equal(validSubject(s),false);
  assert.ok(validTokenLifetime({iat:100,exp:3700}));for(const p of [{iat:100},{exp:300},{iat:100,exp:99},{iat:100,exp:3701}])assert.equal(validTokenLifetime(p),false);
