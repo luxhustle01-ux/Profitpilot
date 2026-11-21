@@ -58,10 +58,11 @@ function argsFor(env,detached=false){
   image,"/usr/local/bin/node","server/index.js"
  ];
 }
-function negative(name,changes,expected){
+function negative(name,changes,expected,forbidden=[]){
  const r=command("timeout",["12s","docker",...argsFor({...baseEnv,...changes})],16_000);
  if(r.status===0||r.status===124||r.status===125||r.signal||
-    !expected.test(r.output)||r.output.includes(signingKey))
+    !expected.test(r.output)||r.output.includes(signingKey)||
+    forbidden.some(marker=>r.output.includes(marker)))
   throw Error("B24 fail-closed startup regression: "+name+
    " (status "+r.status+", expected rejection: "+expected.test(r.output)+")");
  console.log("B24 correctly rejected protected startup: "+name);
@@ -115,6 +116,7 @@ try{
  fixture("bad-writable",{dirMode:0o770});
  fixture("bad-key",{key:"weak"});
  fixture("bad-url",{db:databaseUrl+"?sslmode=disable"});
+ fixture("bad-url-malformed",{db:"postgresql://synthetic_app:b27-log-secret-marker@bad host/profitpilot"});
  fixture("bad-controls",{key:"a".repeat(32)+"\n"+"b".repeat(32)});
  fixture("bad-hardlink");
  linkSync(join(root,"bad-hardlink","key"),join(root,"bad-hardlink","key-alias"));
@@ -148,6 +150,9 @@ try{
   {TENANT_CONTEXT_HMAC_SECRET_FILE:"/run/secrets/bad-controls/key"},/unsafe whitespace or controls/);
  negative("database TLS override in URL",
   {DATABASE_URL_FILE:"/run/secrets/bad-url/db-url"},/Protected database URL requires a host\/database/);
+ negative("malformed database URL redacts password from startup logs",
+  {DATABASE_URL_FILE:"/run/secrets/bad-url-malformed/db-url"},
+  /Protected database URL is invalid/,["b27-log-secret-marker"]);
  negative("ambiguous database environment variable",
   {DATABASE_URL:""},/Ambiguous secret configuration: DATABASE_URL/);
  negative("ambiguous HMAC environment variable",
@@ -164,7 +169,7 @@ try{
  negative("global TLS verification disabled",
   {NODE_TLS_REJECT_UNAUTHORIZED:"0"},
   /Protected profile forbids disabling TLS certificate verification/);
- console.log("B24+B25 PASS: protected offline startup and 18 distinct startup denials; zero external network");
+ console.log("B24+B25 PASS: protected offline startup and 19 distinct startup denials; zero external network");
 }catch(error){
  console.error("B24 FAIL:",error.message);
  process.exitCode=1;

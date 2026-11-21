@@ -152,7 +152,12 @@ export function readSecret(name,env=process.env){
 export function databaseConfig(env=process.env){
  const profile=deploymentProfile(env),connectionString=readSecret("DATABASE_URL",env);
  if(profile.protectedMode){
-  const url=new URL(connectionString);
+  // WHATWG URL errors include an enumerable .input containing the full
+  // database URL (including credentials). Never propagate that exception to
+  // unhandled startup logs or API error handlers.
+  let url;
+  try{url=new URL(connectionString);}
+  catch{throw new Error("Protected database URL is invalid");}
   if(!["postgres:","postgresql:"].includes(url.protocol)||!url.hostname||!url.pathname||url.pathname==="/"||url.hash||url.search)
    throw new Error("Protected database URL requires a host/database and no query or fragment overrides");
  }
