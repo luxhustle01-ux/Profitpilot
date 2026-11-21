@@ -163,13 +163,19 @@ try{
   {MALWARE_SCAN_MODE:"disabled"},/Protected profile requires database TLS/);
  negative("untrusted JWKS host",
   {AUTH_JWKS_URL:"https://127.0.0.1/jwks"},/Protected identity endpoints require trusted nonlocal DNS hosts/);
+ negative("malformed JWKS URL redacts credentials from startup logs",
+  {AUTH_JWKS_URL:"https://admin:b28-jwks-log-marker@bad host/jwks"},
+  /Invalid authentication configuration/,["b28-jwks-log-marker"]);
+ negative("malformed issuer URL redacts credentials from startup logs",
+  {AUTH_ISSUER:"https://admin:b28-issuer-log-marker@bad host/"},
+  /Invalid authentication configuration/,["b28-issuer-log-marker"]);
  negative("protected image profile downgrade",
   {PROFITPILOT_PROFILE:"prototype"},
   /Protected image refuses prototype profile downgrade/);
  negative("global TLS verification disabled",
   {NODE_TLS_REJECT_UNAUTHORIZED:"0"},
   /Protected profile forbids disabling TLS certificate verification/);
- console.log("B24+B25 PASS: protected offline startup and 19 distinct startup denials; zero external network");
+ console.log("B24+B25 PASS: protected offline startup and 21 distinct startup denials; zero external network");
 }catch(error){
  console.error("B24 FAIL:",error.message);
  process.exitCode=1;
