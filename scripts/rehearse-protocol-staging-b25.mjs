@@ -52,6 +52,16 @@ async function exercise(){
   key:readFileSync(join(staging,"issuer.key")),
   cert:readFileSync(join(staging,"issuer.crt"))
  },(req,res)=>{
+  // Synthetic IdP failures must never result in granting access to an
+  // otherwise valid token when there is no trusted JWKS for this endpoint.
+  if(req.url==="/jwks-unavailable"){
+   res.writeHead(503,{"content-type":"application/json","cache-control":"no-store"});
+   res.end(JSON.stringify({error:"synthetic outage"}));return;
+  }
+  if(req.url==="/jwks-malformed"){
+   res.writeHead(200,{"content-type":"application/json","cache-control":"no-store"});
+   res.end(JSON.stringify({keys:"not-a-JWKS-array"}));return;
+  }
   if(req.url!=="/jwks"){res.writeHead(404).end();return;}
   res.writeHead(200,{"content-type":"application/json","cache-control":"no-store"});
   res.end(JSON.stringify({keys:[jwk1,jwk2]}));
@@ -157,6 +167,21 @@ async function exercise(){
   const unknown=await generateKeyPair("RS256");
   assert.equal((await request("/read",await token({pair:unknown,kid:"unknown-key"}))).status,401,
    "unknown JWKS signing key must be refused");
+  // Changing the configured trusted endpoint creates a new verifier with
+  // no cached keys. A 503 or malformed trusted HTTPS response MUST deny
+  // even a correctly signed JWT and recovery must require valid JWKS data.
+  const regularJwksUrl=process.env.AUTH_JWKS_URL;
+  const authenticated=await token();
+  for(const endpointPath of ["/jwks-unavailable","/jwks-malformed"]){
+   process.env.AUTH_JWKS_URL="https://issuer-ci.invalid:"+jwksPort+endpointPath;
+   const denied=await request("/read",authenticated);
+   assert.equal(denied.status,401,"Unavailable or malformed JWKS must fail closed");
+   assert.equal((await denied.json()).error,"Invalid or expired access token");
+  }
+  process.env.AUTH_JWKS_URL=regularJwksUrl;
+  assert.equal((await request("/read",authenticated)).status,200,
+   "Valid JWKS must be required for recovery after endpoint failures");
+  console.log("B28 PASS: isolated HTTPS JWKS 503 and malformed responses denied access; valid JWKS recovery permitted");
   console.log("B25 PASS: HTTPS JWKS trust and JWT issuer/audience/expiry/MFA checks; two overlapping keys accepted, unknown key rejected");
   console.log("B25 LIMIT: live IdP outage/revocation behaviour, DNS egress policy and key-cache eviction are not proved by loopback synthetic issuer");
  }finally{
