@@ -1,4 +1,4 @@
-import {openSync,fstatSync,lstatSync,readSync,closeSync,constants} from "node:fs";
+import {existsSync,openSync,fstatSync,lstatSync,readSync,closeSync,constants} from "node:fs";
 import {isAbsolute,parse,resolve,sep,join} from "node:path";
 
 // Protected deployments may explicitly allow only canonical HTTPS browser origins.
@@ -21,10 +21,19 @@ export function protectedCorsOrigins(raw){
  return origins;
 }
 
+// The package-managed ClamAV adapter is installed only in the hardened image.
+// Its presence is independent of environment-provided profile selection; a
+// misconfigured protected image must not silently fall back to prototype mode.
+export function enforceProtectedImageProfile(mode,scannerInstalled){
+ if(scannerInstalled&&mode!=="protected")
+  throw Error("Protected image refuses prototype profile downgrade");
+}
+
 // Prototype is synthetic only. Protected mode enforces prerequisites, not release approval.
 export function deploymentProfile(env=process.env){
  const mode=env.PROFITPILOT_PROFILE||(env.NODE_ENV==="production"?null:"prototype");
  if(!["prototype","protected"].includes(mode))throw new Error("Explicit PROFITPILOT_PROFILE required");
+ enforceProtectedImageProfile(mode,existsSync("/usr/local/bin/profitpilot-scan"));
  const protectedMode=mode==="protected";
  if(protectedMode&&env.NODE_ENV!=="production")
   throw Error("Protected profile requires NODE_ENV=production");
