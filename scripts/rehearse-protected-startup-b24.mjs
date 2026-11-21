@@ -158,10 +158,13 @@ try{
   {MALWARE_SCAN_MODE:"disabled"},/Protected profile requires database TLS/);
  negative("untrusted JWKS host",
   {AUTH_JWKS_URL:"https://127.0.0.1/jwks"},/Protected identity endpoints require trusted nonlocal DNS hosts/);
+ negative("protected image profile downgrade",
+  {PROFITPILOT_PROFILE:"prototype"},
+  /Protected image refuses prototype profile downgrade/);
  negative("global TLS verification disabled",
   {NODE_TLS_REJECT_UNAUTHORIZED:"0"},
   /Protected profile forbids disabling TLS certificate verification/);
- console.log("B24+B25 PASS: protected offline startup and 17 distinct startup denials; zero external network");
+ console.log("B24+B25 PASS: protected offline startup and 18 distinct startup denials; zero external network");
 }catch(error){
  console.error("B24 FAIL:",error.message);
  process.exitCode=1;

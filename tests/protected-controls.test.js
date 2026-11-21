@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync,chmodSync,symlinkSync,linkSync,unlinkSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {deploymentProfile,databaseConfig,readSecret,validMfa,protectedCorsOrigins,protectedStartupPreflight} from "../server/deployment.js";
+import {deploymentProfile,databaseConfig,readSecret,validMfa,protectedCorsOrigins,protectedStartupPreflight,enforceProtectedImageProfile} from "../server/deployment.js";
 test("protected profile rejects missing prerequisites and TLS overrides",()=>{
  const dir=mkdtempSync(join(tmpdir(),"pp-config-"));
  try{
@@ -177,6 +177,13 @@ test("B22 protected startup rejects a symlinked signing-key mount even with appa
    ...h.env,TENANT_CONTEXT_HMAC_SECRET_FILE:h.key,DATABASE_URL_FILE:link
   }),/owner-only permissions/);
  }finally{h.cleanup();}
+});
+
+test("B26 protected scanner image cannot downgrade to prototype, regardless of environment flags",()=>{
+ assert.throws(()=>enforceProtectedImageProfile("prototype",true),
+  /Protected image refuses prototype profile downgrade/);
+ assert.doesNotThrow(()=>enforceProtectedImageProfile("protected",true));
+ assert.doesNotThrow(()=>enforceProtectedImageProfile("prototype",false));
 });
 
 test("B25 protected profile refuses process-wide TLS verification disablement",()=>{
