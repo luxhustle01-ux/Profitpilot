@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync,chmodSync,symlinkSync,linkSync,unlinkSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {inspect} from "node:util";
 import {deploymentProfile,databaseConfig,readSecret,validMfa,protectedCorsOrigins,protectedStartupPreflight,enforceProtectedImageProfile} from "../server/deployment.js";
 test("protected profile rejects missing prerequisites and TLS overrides",()=>{
  const dir=mkdtempSync(join(tmpdir(),"pp-config-"));
@@ -184,6 +185,22 @@ test("B26 protected scanner image cannot downgrade to prototype, regardless of e
   /Protected image refuses prototype profile downgrade/);
  assert.doesNotThrow(()=>enforceProtectedImageProfile("protected",true));
  assert.doesNotThrow(()=>enforceProtectedImageProfile("prototype",false));
+});
+
+test("B27 malformed protected database URL never exposes mounted credentials in exception metadata",()=>{
+ const h=protectedSecretFixture();
+ try{
+  const marker="b27-synthetic-url-password-marker";
+  writeFileSync(h.db,"postgresql://app:"+marker+"@bad host/profitpilot\n",{mode:0o600});
+  assert.throws(()=>databaseConfig(h.env),error=>{
+   assert.equal(error.message,"Protected database URL is invalid");
+   assert.equal(Object.hasOwn(error,"input"),false);
+   assert.ok(!inspect(error).includes(marker),"Node error inspection leaked database credentials");
+   assert.ok(!String(error.stack).includes(marker),"Stack leaked database credentials");
+   assert.ok(!JSON.stringify(error).includes(marker),"JSON error leaked database credentials");
+   return true;
+  });
+ }finally{h.cleanup();}
 });
 
 test("B25 protected profile refuses process-wide TLS verification disablement",()=>{
